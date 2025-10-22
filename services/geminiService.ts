@@ -9,6 +9,8 @@ export interface LLMOptions {
     provider: string;
 }
 
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 // --- Gemini Implementation ---
 const generateAnswerGemini = async (knowledgeBase: string, systemPrompt: string, question: string, options: LLMOptions): Promise<string> => {
     const prompt = `
@@ -33,7 +35,16 @@ const generateAnswerGemini = async (knowledgeBase: string, systemPrompt: string,
     } catch (error) {
         console.error("Error generating answer with Gemini:", error);
         if (error instanceof Error) {
-            throw new Error(`Failed to generate answer with Gemini: ${error.message}`);
+            let message = error.message;
+            try {
+                const errorJson = JSON.parse(message);
+                if (errorJson.error && errorJson.error.message) {
+                    message = errorJson.error.message;
+                }
+            } catch (e) {
+                // Not a JSON error message, use as is.
+            }
+            throw new Error(`Failed to generate answer with Gemini: ${message}`);
         }
         throw new Error("Failed to get a response from the Gemini model for generating the answer.");
     }
@@ -67,7 +78,18 @@ const evaluateTextGemini = async (
         return { type, status, reason: jsonResponse.reason };
     } catch (error) {
         console.error(`Error during Gemini ${type} evaluation:`, error);
-        const reason = error instanceof Error ? error.message : `API call failed for ${type} evaluation.`;
+        let reason = `API call failed for ${type} evaluation.`;
+        if (error instanceof Error) {
+            reason = error.message;
+             try {
+                const errorJson = JSON.parse(reason);
+                if (errorJson.error && errorJson.error.message) {
+                    reason = errorJson.error.message;
+                }
+            } catch (e) {
+                // Not a JSON error message, use as is.
+            }
+        }
         return { type, status: TestStatus.Error, reason };
     }
 };
@@ -202,15 +224,18 @@ export const runFullTest = async (
     const generatedAnswer = await generateAnswer(knowledgeBase, systemPrompt, question, options);
     const context = { knowledgeBase, question, systemPrompt };
 
-    const evaluationPromises = Object.entries(prompts).map(([criterion, promptTemplate]) => 
-        evaluateText(
-            criterion as EvaluationCriterion, 
+    const evaluations: EvaluationResult[] = [];
+    const criteria = Object.entries(prompts);
+
+    for (const [criterion, promptTemplate] of criteria) {
+        const result = await evaluateText(
+            criterion as EvaluationCriterion,
             formatPrompt(promptTemplate, generatedAnswer, context),
             options
-        )
-    );
-
-    const evaluations = await Promise.all(evaluationPromises);
+        );
+        evaluations.push(result);
+        await delay(200); // Add a small delay between evaluation calls to avoid rate-limiting
+    }
 
     // Fix: Add the missing 'status' property to satisfy the return type.
     return {

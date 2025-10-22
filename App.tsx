@@ -5,12 +5,7 @@ import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
 import { LoadingSpinnerIcon, ChevronDownIcon, ExportIcon, KeyIcon, CpuChipIcon } from './components/Icons';
 
-interface ParsedKnowledgeFile {
-  knowledgeBase: string;
-  systemPrompt: string;
-}
-
-const CONCURRENCY_LIMIT = 5;
+const CONCURRENCY_LIMIT = 1;
 
 const createDefaultPrompts = (): EvaluationPrompts => {
     const prompts: Partial<EvaluationPrompts> = {};
@@ -45,7 +40,8 @@ const StatusCard: React.FC<{ title: string; count: number; color: string }> = ({
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [parsedFile, setParsedFile] = useState<ParsedKnowledgeFile | null>(null);
+  const [knowledgeBase, setKnowledgeBase] = useState<string>('');
+  const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [questionsText, setQuestionsText] = useState<string>('');
   const [results, setResults] = useState<TestResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,55 +54,20 @@ const App: React.FC = () => {
   const [modelName, setModelName] = useState<string>('gemini-2.5-flash');
   const [provider, setProvider] = useState<string>('Google Gemini');
 
-
-  const parseMarkdown = (content: string): ParsedKnowledgeFile => {
-    // Use a case-insensitive regex to find "## System Prompt" which might not be at the start of a line.
-    const separatorRegex = /##\s*System Prompt/i;
-    const separatorMatch = content.match(separatorRegex);
-
-    let knowledgeBase = '';
-    let systemPrompt = '';
-
-    if (separatorMatch && separatorMatch.index !== undefined) {
-        // Split the content at the first occurrence of the separator.
-        knowledgeBase = content.substring(0, separatorMatch.index).trim();
-        // The system prompt is everything after the full matched separator string.
-        systemPrompt = content.substring(separatorMatch.index + separatorMatch[0].length).trim();
-    } else {
-        // No separator found, so the whole file is the knowledge base.
-        knowledgeBase = content.trim();
-        systemPrompt = ''; // System prompt is optional.
-    }
-
-    if (!knowledgeBase) {
-        if (systemPrompt) {
-             throw new Error("A knowledge base is required. The file seems to contain only a system prompt. Please add knowledge base content before the '## System Prompt' heading.");
-        }
-        throw new Error("The knowledge base content cannot be empty. Please check the uploaded file.");
-    }
-    
-    return { knowledgeBase, systemPrompt };
-  };
-  
   const handleFileChange = (selectedFile: File | null) => {
     setFile(selectedFile);
     setError(null);
     setResults([]);
-    setParsedFile(null);
+    setKnowledgeBase('');
 
     if (selectedFile) {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const content = e.target?.result as string;
-          const parsed = parseMarkdown(content);
-          setParsedFile(parsed);
+          setKnowledgeBase(content);
         } catch (err) {
-          if (err instanceof Error) {
-            setError(err.message);
-          } else {
-            setError('An unknown error occurred while parsing the file.');
-          }
+          setError('An unknown error occurred while reading the file.');
           setFile(null);
         }
       };
@@ -135,8 +96,8 @@ const App: React.FC = () => {
   const handleRunTests = useCallback(async () => {
     const questions = questionsText.split('\n').filter(line => line.trim().length > 0);
     
-    if (!parsedFile) {
-      setError('No parsed file available to run tests.');
+    if (!knowledgeBase) {
+      setError('A knowledge base is required. Please upload a file.');
       return;
     }
     if (!apiKey) {
@@ -166,8 +127,8 @@ const App: React.FC = () => {
 
         try {
             const resultData = await runFullTest(
-                parsedFile.knowledgeBase,
-                parsedFile.systemPrompt,
+                knowledgeBase,
+                systemPrompt,
                 test.question,
                 prompts,
                 { apiKey, modelName, provider }
@@ -200,7 +161,7 @@ const App: React.FC = () => {
     await Promise.all(Array.from(executing));
     
     setIsLoading(false);
-  }, [parsedFile, prompts, apiKey, modelName, provider, questionsText]);
+  }, [knowledgeBase, systemPrompt, prompts, apiKey, modelName, provider, questionsText]);
   
   const handleExportCSV = () => {
     if (results.length === 0) return;
@@ -292,7 +253,7 @@ const App: React.FC = () => {
             RAGbot Quality Assurance Suite
           </h1>
           <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
-            Upload your knowledge base and system prompt in a single .md file to test your RAGbot's performance.
+            Configure your LLM, upload a knowledge base, provide a system prompt, and add test questions to evaluate your RAGbot.
           </p>
         </header>
 
@@ -343,6 +304,17 @@ const App: React.FC = () => {
                     <h2 className="text-lg font-semibold text-gray-300 mb-3">Test Configuration</h2>
                     <div className="flex flex-col gap-6">
                         <FileUpload onFileChange={handleFileChange} currentFile={file} />
+                        <div>
+                            <label htmlFor="system-prompt" className="block text-sm font-medium text-gray-400 mb-2">RAGbot System Prompt</label>
+                            <textarea
+                                id="system-prompt"
+                                rows={5}
+                                className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-mono transition-shadow"
+                                placeholder="e.g., You are a helpful assistant. You will be provided with a knowledge base to answer questions. Base your answers only on the provided text."
+                                value={systemPrompt}
+                                onChange={(e) => setSystemPrompt(e.target.value)}
+                            />
+                        </div>
                         <div>
                             <label htmlFor="questions" className="block text-sm font-medium text-gray-400 mb-2">Test Questions (one per line)</label>
                             <textarea

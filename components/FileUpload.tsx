@@ -54,7 +54,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, currentFile }) =>
               <>{currentFile.name}</>
             ) : (
               <>
-                Drop a <span className="text-indigo-400">.md</span> file (KB & Prompt), or{' '}
+                Drop your Knowledge Base file (.md), or{' '}
                 <span className="text-indigo-400">click to select</span>
               </>
             )}
