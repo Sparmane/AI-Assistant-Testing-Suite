@@ -1,0 +1,5 @@
+{
+  "name": "RAGbot Quality Assurance Suite",
+  "description": "A testing tool for RAGbots that evaluates generated answers for bias, AI safety, and relevance based on a provided knowledge base and set of questions.",
+  "requestFramePermissions": []
+}
