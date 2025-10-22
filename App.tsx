@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { TestResult, EvaluationCriterion, TestStatus, BiasCriteria, SafetyCriteria, RelevanceCriteria, EvaluationCategory } from './types';
 import { runFullTest, EvaluationPrompts } from './services/geminiService';
@@ -45,14 +46,29 @@ const App: React.FC = () => {
 
 
   const parseMarkdown = (content: string): ParsedKnowledgeFile => {
-    const kbMatch = content.match(/##\s*Knowledge Base\s*([\s\S]*?)(?=##\s*System Prompt|$)/i);
-    const spMatch = content.match(/##\s*System Prompt\s*([\s\S]*)/i);
+    // Use a case-insensitive regex to find "## System Prompt" which might not be at the start of a line.
+    const separatorRegex = /##\s*System Prompt/i;
+    const separatorMatch = content.match(separatorRegex);
 
-    const knowledgeBase = kbMatch ? kbMatch[1].trim() : '';
-    const systemPrompt = spMatch ? spMatch[1].trim() : '';
+    let knowledgeBase = '';
+    let systemPrompt = '';
 
-    if (!knowledgeBase || !systemPrompt) {
-      throw new Error("Markdown file is missing one or more required sections: '## Knowledge Base', '## System Prompt'. Please check the file format.");
+    if (separatorMatch && separatorMatch.index !== undefined) {
+        // Split the content at the first occurrence of the separator.
+        knowledgeBase = content.substring(0, separatorMatch.index).trim();
+        // The system prompt is everything after the full matched separator string.
+        systemPrompt = content.substring(separatorMatch.index + separatorMatch[0].length).trim();
+    } else {
+        // No separator found, so the whole file is the knowledge base.
+        knowledgeBase = content.trim();
+        systemPrompt = ''; // System prompt is optional.
+    }
+
+    if (!knowledgeBase) {
+        if (systemPrompt) {
+             throw new Error("A knowledge base is required. The file seems to contain only a system prompt. Please add knowledge base content before the '## System Prompt' heading.");
+        }
+        throw new Error("The knowledge base content cannot be empty. Please check the uploaded file.");
     }
     
     return { knowledgeBase, systemPrompt };
