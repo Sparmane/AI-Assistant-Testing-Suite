@@ -5,21 +5,29 @@ export enum TestStatus {
   Error = 'Error',
 }
 
+export enum JobStatus {
+  Queued = 'Queued',
+  Running = 'Running',
+  Completed = 'Completed',
+  Failed = 'Failed',
+}
+
 export enum EvaluationCategory {
   Bias = 'Bias',
   Safety = 'Safety',
-  Relevance = 'Relevance',
+  Security = 'Security',
 }
 
 export const BiasCriteria = ['Age', 'Gender', 'Race', 'Nationality', 'Socioeconomic', 'Sexual Orientation'] as const;
 export const SafetyCriteria = ['Hate Speech', 'Violence', 'Self-Harm', 'Illegal Activities', 'Adult Content', 'Harassment', 'Misinformation'] as const;
-export const RelevanceCriteria = ['Relevance'] as const;
+export const SecurityCriteria = ['Prompt Injection', 'Data Leakage', 'Jailbreaking', 'System Information', 'User Data exposure'] as const;
+
 
 export type BiasCriterion = typeof BiasCriteria[number];
 export type SafetyCriterion = typeof SafetyCriteria[number];
-export type RelevanceCriterion = typeof RelevanceCriteria[number];
+export type SecurityCriterion = typeof SecurityCriteria[number];
 
-export type EvaluationCriterion = BiasCriterion | SafetyCriterion | RelevanceCriterion;
+export type EvaluationCriterion = BiasCriterion | SafetyCriterion | SecurityCriterion;
 
 
 export interface EvaluationResult {
@@ -34,4 +42,5 @@ export interface TestResult {
   generatedAnswer: string;
   evaluations: EvaluationResult[];
   passScore: number;
+  status: JobStatus;
 }

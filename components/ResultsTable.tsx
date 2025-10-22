@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TestResult, EvaluationResult, TestStatus, EvaluationCategory, BiasCriteria, SafetyCriteria, RelevanceCriteria, EvaluationCriterion } from '../types';
+import { TestResult, EvaluationResult, TestStatus, EvaluationCategory, BiasCriteria, SafetyCriteria, SecurityCriteria, EvaluationCriterion, JobStatus } from '../types';
 import { CheckCircleIcon, CrossCircleIcon, ClockIcon, AlertTriangleIcon, ChevronDownIcon } from './Icons';
 
 const getStatusIcon = (status: TestStatus) => {
@@ -11,7 +11,7 @@ const getStatusIcon = (status: TestStatus) => {
         case TestStatus.Error:
             return <AlertTriangleIcon className="text-yellow-400" />;
         case TestStatus.Pending:
-            return <ClockIcon className="text-gray-400 animate-spin" />;
+            return <ClockIcon className="text-gray-500" />;
     }
 };
 
@@ -20,8 +20,8 @@ const getCategoryStatus = (evaluations: EvaluationResult[], criteria: readonly E
     if (categoryEvals.some(e => e.status === TestStatus.Error)) return TestStatus.Error;
     if (categoryEvals.some(e => e.status === TestStatus.Pending)) return TestStatus.Pending;
     if (categoryEvals.some(e => e.status === TestStatus.Fail)) return TestStatus.Fail;
-    if (categoryEvals.length < criteria.length) return TestStatus.Pending; // Not all tests are in yet
-    return TestStatus.Pass;
+    if (categoryEvals.every(e => e.status === TestStatus.Pass)) return TestStatus.Pass;
+    return TestStatus.Pending;
 };
 
 
@@ -31,8 +31,36 @@ const ResultRow: React.FC<{ result: TestResult }> = ({ result }) => {
     const categoryStatuses = {
         [EvaluationCategory.Bias]: getCategoryStatus(result.evaluations, BiasCriteria),
         [EvaluationCategory.Safety]: getCategoryStatus(result.evaluations, SafetyCriteria),
-        [EvaluationCategory.Relevance]: getCategoryStatus(result.evaluations, RelevanceCriteria),
+        [EvaluationCategory.Security]: getCategoryStatus(result.evaluations, SecurityCriteria),
     };
+
+    const renderCategoryIcon = (category: EvaluationCategory) => {
+        const status = categoryStatuses[category];
+        if (status === TestStatus.Pending && result.status === JobStatus.Running) {
+             return <ClockIcon className="text-gray-400 animate-spin" />;
+        }
+        return getStatusIcon(status);
+    }
+
+    const passScoreCell = () => {
+        switch (result.status) {
+            case JobStatus.Running:
+                return <span className="text-blue-400">Running...</span>;
+            case JobStatus.Queued:
+                return <span className="text-gray-500">Queued</span>;
+            case JobStatus.Failed:
+                return <span className="text-red-400">Failed</span>;
+            case JobStatus.Completed:
+                return (
+                    <span className={result.passScore >= 80 ? 'text-green-400' : result.passScore >= 50 ? 'text-yellow-400' : 'text-red-400'}>
+                        {result.passScore.toFixed(0)}%
+                    </span>
+                );
+            default:
+                return null;
+        }
+    };
+
 
     const renderDetailGroup = (title: string, criteria: readonly EvaluationCriterion[]) => (
         <div>
@@ -55,7 +83,7 @@ const ResultRow: React.FC<{ result: TestResult }> = ({ result }) => {
     return (
         <>
             <tr 
-              className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 cursor-pointer" 
+              className={`border-b border-gray-700 transition-colors ${result.status !== JobStatus.Queued ? 'bg-gray-800 hover:bg-gray-700/50' : 'bg-gray-800/50 text-gray-500'} cursor-pointer`}
               onClick={() => setIsExpanded(!isExpanded)}
             >
                 <td className="px-6 py-4 font-medium text-gray-200">
@@ -66,13 +94,11 @@ const ResultRow: React.FC<{ result: TestResult }> = ({ result }) => {
                 </td>
                 {Object.values(EvaluationCategory).map(category => (
                     <td key={category} className="px-6 py-4 text-center">
-                        {getStatusIcon(categoryStatuses[category])}
+                        {renderCategoryIcon(category)}
                     </td>
                 ))}
                 <td className="px-6 py-4 font-semibold text-center text-lg">
-                    <span className={result.passScore >= 80 ? 'text-green-400' : result.passScore >= 50 ? 'text-yellow-400' : 'text-red-400'}>
-                        {result.passScore.toFixed(0)}%
-                    </span>
+                    {passScoreCell()}
                 </td>
             </tr>
             {isExpanded && (
@@ -80,12 +106,14 @@ const ResultRow: React.FC<{ result: TestResult }> = ({ result }) => {
                     <td colSpan={5} className="p-0">
                         <div className="p-6 bg-gray-900/50 animate-fade-in">
                             <h4 className="font-semibold text-gray-300 mb-2">Generated Answer:</h4>
-                            <p className="text-gray-400 whitespace-pre-wrap font-mono text-sm bg-black/30 p-4 rounded-md mb-6">{result.generatedAnswer}</p>
+                            <p className="text-gray-400 whitespace-pre-wrap font-mono text-sm bg-black/30 p-4 rounded-md mb-6">
+                              {result.generatedAnswer || "Answer not generated yet."}
+                            </p>
                             
                             <div className="space-y-6">
                                 {renderDetailGroup('Bias Evaluation', BiasCriteria)}
                                 {renderDetailGroup('Safety Evaluation', SafetyCriteria)}
-                                {renderDetailGroup('Relevance Evaluation', RelevanceCriteria)}
+                                {renderDetailGroup('Security Evaluation', SecurityCriteria)}
                             </div>
                         </div>
                     </td>
@@ -111,7 +139,7 @@ const ResultsTable: React.FC<{ results: TestResult[] }> = ({ results }) => {
               Safety
             </th>
             <th scope="col" className="px-6 py-3 text-center">
-              Relevance
+              Security
             </th>
             <th scope="col" className="px-6 py-3 text-center">
               Pass Score

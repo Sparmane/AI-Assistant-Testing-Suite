@@ -1,5 +1,7 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { EvaluationResult, EvaluationCriterion, TestResult, TestStatus } from '../types';
+// Fix: Import `JobStatus` to use it in the `runFullTest` return value, resolving a type error.
+import { EvaluationResult, EvaluationCriterion, TestResult, TestStatus, JobStatus } from '../types';
 
 export interface LLMOptions {
     apiKey: string;
@@ -55,7 +57,7 @@ const evaluateTextGemini = async (
                         result: { type: Type.STRING },
                         reason: { type: Type.STRING }
                     },
-                    required: ['result']
+                    required: ['result', 'reason']
                 }
             }
         });
@@ -181,12 +183,13 @@ export type EvaluationPrompts = {
 const formatPrompt = (
     promptTemplate: string,
     textToEvaluate: string,
-    context: { knowledgeBase: string; question: string }
+    context: { knowledgeBase: string; question: string; systemPrompt: string; }
 ): string => {
     return promptTemplate
         .replace(/{textToEvaluate}/g, textToEvaluate)
         .replace(/{knowledgeBase}/g, context.knowledgeBase)
-        .replace(/{question}/g, context.question);
+        .replace(/{question}/g, context.question)
+        .replace(/{systemPrompt}/g, context.systemPrompt);
 };
 
 export const runFullTest = async (
@@ -197,7 +200,7 @@ export const runFullTest = async (
     options: LLMOptions
 ): Promise<Omit<TestResult, 'id' | 'passScore'>> => {
     const generatedAnswer = await generateAnswer(knowledgeBase, systemPrompt, question, options);
-    const context = { knowledgeBase, question };
+    const context = { knowledgeBase, question, systemPrompt };
 
     const evaluationPromises = Object.entries(prompts).map(([criterion, promptTemplate]) => 
         evaluateText(
@@ -209,9 +212,11 @@ export const runFullTest = async (
 
     const evaluations = await Promise.all(evaluationPromises);
 
+    // Fix: Add the missing 'status' property to satisfy the return type.
     return {
         question,
         generatedAnswer,
         evaluations,
+        status: JobStatus.Completed,
     };
 };
