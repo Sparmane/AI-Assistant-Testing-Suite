@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 // Fix: Import `JobStatus` to use it in the `runFullTest` return value, resolving a type error.
 import { EvaluationResult, EvaluationCriterion, TestResult, TestStatus, JobStatus } from '../types';
@@ -7,6 +6,8 @@ export interface LLMOptions {
     apiKey: string;
     modelName: string;
     provider: string;
+    azureEndpoint?: string;
+    azureDeploymentName?: string;
 }
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -172,6 +173,89 @@ const evaluateTextOpenAI = async (
     }
 };
 
+// --- Azure Foundry Open AI Implementation ---
+const generateAnswerAzureOpenAI = async (knowledgeBase: string, systemPrompt: string, question: string, options: LLMOptions): Promise<string> => {
+    if (!options.azureEndpoint || !options.azureDeploymentName) {
+        throw new Error("Azure endpoint and deployment name are required.");
+    }
+    const apiVersion = '2024-02-01';
+    const apiEndpoint = `${options.azureEndpoint}/openai/deployments/${options.azureDeploymentName}/chat/completions?api-version=${apiVersion}`;
+    const systemContent = `${systemPrompt}\nYou must answer the user's question based *only* on the knowledge base provided.`;
+    const userContent = `Knowledge Base:\n---\n${knowledgeBase}\n---\nUser Question: ${question}`;
+
+    try {
+        const res = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': options.apiKey
+            },
+            body: JSON.stringify({
+                messages: [
+                    { role: 'system', content: systemContent },
+                    { role: 'user', content: userContent }
+                ]
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(`Azure OpenAI API Error: ${res.statusText} - ${errorData.error?.message}`);
+        }
+
+        const data = await res.json();
+        return data.choices[0]?.message?.content || 'No content returned from Azure OpenAI.';
+    } catch (error) {
+        console.error("Error generating answer with Azure OpenAI:", error);
+        if (error instanceof Error) throw error;
+        throw new Error("Failed to get a response from Azure OpenAI for generating the answer.");
+    }
+};
+
+const evaluateTextAzureOpenAI = async (
+    type: EvaluationCriterion, 
+    prompt: string,
+    options: LLMOptions
+): Promise<EvaluationResult> => {
+     if (!options.azureEndpoint || !options.azureDeploymentName) {
+        throw new Error("Azure endpoint and deployment name are required.");
+    }
+    const apiVersion = '2024-02-01';
+    const apiEndpoint = `${options.azureEndpoint}/openai/deployments/${options.azureDeploymentName}/chat/completions?api-version=${apiVersion}`;
+    const systemInstruction = "You are an AI assistant that evaluates text and responds in valid JSON format.";
+    
+    try {
+        const res = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-key': options.apiKey
+            },
+            body: JSON.stringify({
+                messages: [
+                    { role: 'system', content: systemInstruction },
+                    { role: 'user', content: prompt }
+                ],
+                response_format: { type: 'json_object' }
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(`Azure OpenAI API Error: ${res.statusText} - ${errorData.error?.message}`);
+        }
+
+        const data = await res.json();
+        const jsonResponse = JSON.parse(data.choices[0]?.message?.content);
+        const status = jsonResponse.result === 'Pass' ? TestStatus.Pass : TestStatus.Fail;
+        return { type, status, reason: jsonResponse.reason };
+    } catch (error) {
+        console.error(`Error during Azure OpenAI ${type} evaluation:`, error);
+        const reason = error instanceof Error ? error.message : `API call failed for ${type} evaluation.`;
+        return { type, status: TestStatus.Error, reason };
+    }
+};
+
 
 // --- Provider Dispatchers ---
 const generateAnswer = (knowledgeBase: string, systemPrompt: string, question: string, options: LLMOptions): Promise<string> => {
@@ -180,6 +264,8 @@ const generateAnswer = (knowledgeBase: string, systemPrompt: string, question: s
             return generateAnswerOpenAI(knowledgeBase, systemPrompt, question, options);
         case 'Google Gemini':
             return generateAnswerGemini(knowledgeBase, systemPrompt, question, options);
+        case 'Azure Foundry Open AI':
+            return generateAnswerAzureOpenAI(knowledgeBase, systemPrompt, question, options);
         default:
             throw new Error(`Unsupported provider: ${options.provider}`);
     }
@@ -191,6 +277,8 @@ const evaluateText = (type: EvaluationCriterion, prompt: string, options: LLMOpt
             return evaluateTextOpenAI(type, prompt, options);
         case 'Google Gemini':
             return evaluateTextGemini(type, prompt, options);
+        case 'Azure Foundry Open AI':
+            return evaluateTextAzureOpenAI(type, prompt, options);
         default:
             throw new Error(`Unsupported provider: ${options.provider}`);
     }

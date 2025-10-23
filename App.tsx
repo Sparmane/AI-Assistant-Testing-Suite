@@ -3,7 +3,7 @@ import { TestResult, EvaluationCriterion, TestStatus, BiasCriteria, SafetyCriter
 import { runFullTest, EvaluationPrompts } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
-import { LoadingSpinnerIcon, ChevronDownIcon, ExportIcon, KeyIcon, CpuChipIcon } from './components/Icons';
+import { LoadingSpinnerIcon, ChevronDownIcon, ExportIcon, KeyIcon, CpuChipIcon, GlobeAltIcon } from './components/Icons';
 
 const CONCURRENCY_LIMIT = 1;
 
@@ -53,6 +53,8 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string>('');
   const [modelName, setModelName] = useState<string>('gemini-2.5-flash');
   const [provider, setProvider] = useState<string>('Google Gemini');
+  const [azureEndpoint, setAzureEndpoint] = useState<string>('');
+  const [azureDeploymentName, setAzureDeploymentName] = useState<string>('');
 
   const handleFileChange = (selectedFile: File | null) => {
     setFile(selectedFile);
@@ -88,8 +90,14 @@ const App: React.FC = () => {
     setProvider(newProvider);
     if (newProvider === 'OpenAI') {
       setModelName('gpt-3.5-turbo');
+      setAzureEndpoint('');
+      setAzureDeploymentName('');
     } else if (newProvider === 'Google Gemini') {
       setModelName('gemini-2.5-flash');
+      setAzureEndpoint('');
+      setAzureDeploymentName('');
+    } else if (newProvider === 'Azure Foundry Open AI') {
+      setModelName('');
     }
   };
 
@@ -103,6 +111,10 @@ const App: React.FC = () => {
     if (!apiKey) {
       setError('API Key is required to run tests.');
       return;
+    }
+    if (provider === 'Azure Foundry Open AI' && (!azureEndpoint || !azureDeploymentName)) {
+        setError('Azure Endpoint and Deployment Name are required for Azure Foundry Open AI.');
+        return;
     }
      if (questions.length === 0) {
       setError('Please enter at least one test question.');
@@ -131,7 +143,7 @@ const App: React.FC = () => {
                 systemPrompt,
                 test.question,
                 prompts,
-                { apiKey, modelName, provider }
+                { apiKey, modelName, provider, azureEndpoint, azureDeploymentName }
             );
             
             const passCount = resultData.evaluations.filter(e => e.status === TestStatus.Pass).length;
@@ -161,7 +173,7 @@ const App: React.FC = () => {
     await Promise.all(Array.from(executing));
     
     setIsLoading(false);
-  }, [knowledgeBase, systemPrompt, prompts, apiKey, modelName, provider, questionsText]);
+  }, [knowledgeBase, systemPrompt, prompts, apiKey, modelName, provider, questionsText, azureEndpoint, azureDeploymentName]);
   
   const handleExportCSV = () => {
     if (results.length === 0) return;
@@ -244,6 +256,9 @@ const App: React.FC = () => {
   const totalCount = results.length;
   const progress = totalCount > 0 ? ((completedCount + failedCount) / totalCount) * 100 : 0;
 
+  const isAzure = provider === 'Azure Foundry Open AI';
+  const isRunButtonDisabled = !file || !apiKey || isLoading || !!error || questionsText.trim() === '' || (isAzure && (!azureEndpoint || !azureDeploymentName));
+
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-200 font-sans">
@@ -261,29 +276,65 @@ const App: React.FC = () => {
             <div className="space-y-6">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-300 mb-3">LLM Configuration</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                              <label htmlFor="provider" className="block text-sm font-medium text-gray-400 mb-2">Provider</label>
                              <select id="provider" value={provider} onChange={handleProviderChange} className="w-full bg-gray-900 border border-gray-600 rounded-md p-2.5 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
                                  <option>Google Gemini</option>
                                  <option>OpenAI</option>
+                                 <option>Azure Foundry Open AI</option>
                              </select>
                         </div>
-                        <div className="relative">
-                            <label htmlFor="modelName" className="block text-sm font-medium text-gray-400 mb-2">Model Name</label>
-                             <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
-                                <CpuChipIcon className="w-5 h-5 text-gray-500" />
+
+                        {provider === 'Azure Foundry Open AI' ? (
+                            <>
+                                <div className="relative">
+                                    <label htmlFor="azureEndpoint" className="block text-sm font-medium text-gray-400 mb-2">Azure Endpoint</label>
+                                    <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
+                                        <GlobeAltIcon className="w-5 h-5 text-gray-500" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        id="azureEndpoint"
+                                        value={azureEndpoint}
+                                        onChange={(e) => setAzureEndpoint(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-600 rounded-md p-2.5 pl-10 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                        placeholder="https://your-resource.openai.azure.com"
+                                    />
+                                </div>
+                                <div className="relative">
+                                    <label htmlFor="azureDeploymentName" className="block text-sm font-medium text-gray-400 mb-2">Azure Deployment Name</label>
+                                    <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
+                                        <CpuChipIcon className="w-5 h-5 text-gray-500" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        id="azureDeploymentName"
+                                        value={azureDeploymentName}
+                                        onChange={(e) => setAzureDeploymentName(e.target.value)}
+                                        className="w-full bg-gray-900 border border-gray-600 rounded-md p-2.5 pl-10 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                        placeholder="e.g., gpt-4-deployment"
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="relative">
+                                <label htmlFor="modelName" className="block text-sm font-medium text-gray-400 mb-2">Model Name</label>
+                                 <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
+                                    <CpuChipIcon className="w-5 h-5 text-gray-500" />
+                                </div>
+                                <input
+                                    type="text"
+                                    id="modelName"
+                                    value={modelName}
+                                    onChange={(e) => setModelName(e.target.value)}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded-md p-2.5 pl-10 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="e.g., gemini-2.5-flash"
+                                />
                             </div>
-                            <input
-                                type="text"
-                                id="modelName"
-                                value={modelName}
-                                onChange={(e) => setModelName(e.target.value)}
-                                className="w-full bg-gray-900 border border-gray-600 rounded-md p-2.5 pl-10 text-sm text-gray-300 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                                placeholder="e.g., gemini-2.5-flash"
-                            />
-                        </div>
-                        <div className="md:col-span-2 relative">
+                        )}
+                        
+                        <div className="relative">
                             <label htmlFor="apiKey" className="block text-sm font-medium text-gray-400 mb-2">API Key</label>
                             <div className="absolute inset-y-0 left-0 top-6 flex items-center pl-3 pointer-events-none">
                                 <KeyIcon className="w-5 h-5 text-gray-500" />
@@ -328,7 +379,7 @@ const App: React.FC = () => {
                         </div>
                         <button
                             onClick={handleRunTests}
-                            disabled={!file || !apiKey || isLoading || !!error || questionsText.trim() === ''}
+                            disabled={isRunButtonDisabled}
                             className="w-full px-8 py-3 bg-indigo-600 text-white font-semibold rounded-md shadow-lg hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-2"
                         >
                             {isLoading ? (

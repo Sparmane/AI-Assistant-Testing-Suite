@@ -66,3 +66,9 @@ export const CpuChipIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h2m-2 4h2m5-9v2m4-2v2m5 5h-2m2 4h-2m-5 5v-2m-4 2v-2" />
     </Icon>
 );
+
+export const GlobeAltIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <Icon {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m0 0a9 9 0 019-9m-9 9a9 9 0 009 9" />
+    </Icon>
+);
