@@ -44,3 +44,13 @@ export interface TestResult {
   passScore: number;
   status: JobStatus;
 }
+
+export interface GenerativeTestResult {
+  id: number;
+  criteria: string;
+  generatedText: string;
+  evaluations: EvaluationResult[];
+  passScore: number;
+  status: JobStatus;
+  error?: string;
+}
